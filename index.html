@@ -48,17 +48,50 @@
             pointer-events: auto;
             animation: slideUp 0.3s ease-out;
         }
+
+        /* Sidebar Styles */
+        #sidebar {
+            transition: transform 0.3s ease;
+        }
+        .sidebar-item.active {
+            background-color: #eef2ff;
+            color: #4f46e5;
+            border-right: 4px solid #4f46e5;
+        }
     </style>
 </head>
 <body class="min-h-screen pb-10">
 
     <div id="toast-container"></div>
 
+    <!-- Sidebar Menu -->
+    <div id="sidebar-overlay" onclick="toggleSidebar(false)" class="fixed inset-0 bg-black/40 z-[60] hidden opacity-0 transition-opacity duration-300"></div>
+    <div id="sidebar" class="fixed top-0 left-0 bottom-0 w-72 bg-white z-[70] shadow-2xl transform -translate-x-full flex flex-col">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">Lịch học</h2>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Danh sách hồ sơ</p>
+            </div>
+            <button onclick="toggleSidebar(false)" class="text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto py-4" id="profile-list">
+            <!-- Profile items will be injected here -->
+        </div>
+        <div class="p-6 border-t border-gray-100 text-center">
+            <p class="text-[10px] text-gray-300 font-medium italic">S-Schedule v2.0 - Multi Profile</p>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex justify-between items-center">
-        <div>
-            <h1 class="text-xl font-bold text-gray-800">S-Schedule</h1>
-            <p id="current-date-header" class="text-[10px] text-gray-400 font-bold uppercase tracking-wider"></p>
+        <div class="flex items-center space-x-4">
+            <button onclick="toggleSidebar(true)" class="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                <i class="fas fa-bars text-lg"></i>
+            </button>
+            <div>
+                <h1 class="text-xl font-bold text-gray-800">S-Schedule</h1>
+                <p id="current-date-header" class="text-[10px] text-gray-400 font-bold uppercase tracking-wider"></p>
+            </div>
         </div>
         <div class="flex items-center space-x-2">
             <button onclick="toggleModal(true)" class="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
@@ -221,17 +254,100 @@
     </div>
 
     <script>
-        let schedules = JSON.parse(localStorage.getItem('schedules')) || [];
+        // PROFILE STATE MANAGEMENT
+        let profiles = JSON.parse(localStorage.getItem('s_profiles')) || [
+            { id: 'me', name: 'Của tôi' },
+            { id: 'p1', name: 'Người học 1' },
+            { id: 'p2', name: 'Người học 2' },
+            { id: 'p3', name: 'Người học 3' },
+            { id: 'p4', name: 'Người học 4' }
+        ];
+        let activeProfileId = localStorage.getItem('s_active_profile') || 'me';
+
+        // ORIGINAL DATA LOADING WRAPPED BY PROFILE
+        let schedules = [];
+        let notiSettings = {};
+        let startDate = "";
+
+        function loadProfileData(pid) {
+            activeProfileId = pid;
+            localStorage.setItem('s_active_profile', pid);
+            
+            // Cấu trúc key mới: prefix_profileID_key
+            const prefix = `s_v2_${pid}_`;
+            schedules = JSON.parse(localStorage.getItem(prefix + 'schedules')) || [];
+            notiSettings = JSON.parse(localStorage.getItem(prefix + 'noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
+            startDate = localStorage.getItem(prefix + 'app_start_date') || getMonday(new Date()).toISOString();
+            
+            // Sync with UI
+            const real = calculateRealWeek();
+            viewWeek = real > 0 ? real : 1;
+            
+            updateHeader();
+            renderDaySelector();
+            renderSchedules();
+            renderProfileList();
+        }
+
+        function saveProfileData() {
+            const prefix = `s_v2_${activeProfileId}_`;
+            localStorage.setItem(prefix + 'schedules', JSON.stringify(schedules));
+            localStorage.setItem(prefix + 'noti_settings', JSON.stringify(notiSettings));
+            localStorage.setItem(prefix + 'app_start_date', startDate);
+        }
+
+        function toggleSidebar(show) {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (show) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.add('opacity-100'), 10);
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.remove('opacity-100');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        function editProfileName(id) {
+            if (id === 'me') return;
+            const profile = profiles.find(p => p.id === id);
+            const newName = prompt("Nhập tên mới cho lịch này:", profile.name);
+            if (newName && newName.trim()) {
+                profile.name = newName.trim();
+                localStorage.setItem('s_profiles', JSON.stringify(profiles));
+                renderProfileList();
+            }
+        }
+
+        function renderProfileList() {
+            const container = document.getElementById('profile-list');
+            container.innerHTML = profiles.map(p => `
+                <div class="sidebar-item px-6 py-4 flex items-center justify-between cursor-pointer transition-colors hover:bg-gray-50 ${p.id === activeProfileId ? 'active' : ''}" 
+                     onclick="loadProfileData('${p.id}')">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500">
+                            <i class="fas ${p.id === 'me' ? 'fa-user-graduate' : 'fa-user'}"></i>
+                        </div>
+                        <span class="font-semibold text-gray-700">${p.name}</span>
+                    </div>
+                    ${p.id !== 'me' ? `
+                        <button onclick="event.stopPropagation(); editProfileName('${p.id}')" class="text-gray-300 hover:text-indigo-500 p-2">
+                            <i class="fas fa-edit text-sm"></i>
+                        </button>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // ORIGINAL LOGIC (MODIFIED TO USE SAVE_PROFILE_DATA)
         let viewWeek = 1;
         let selectedDay = new Date().getDay();
         const days = [{ id: 1, name: 'T2' }, { id: 2, name: 'T3' }, { id: 3, name: 'T4' }, { id: 4, name: 'T5' }, { id: 5, name: 'T6' }, { id: 6, name: 'T7' }, { id: 0, name: 'CN' }];
         const dayMap = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
-        
-        let notiSettings = JSON.parse(localStorage.getItem('noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
-        let startDate = localStorage.getItem('app_start_date') || getMonday(new Date()).toISOString();
         let sentNotifications = new Set();
 
-        // THÔNG BÁO
         async function handleNotificationToggle() {
             const checkbox = document.getElementById('noti-toggle');
             if (checkbox.checked) {
@@ -267,7 +383,7 @@
                 const diffMin = Math.floor(diffMs / 60000);
 
                 if (diffMin === notiSettings.timeBefore) {
-                    const notiId = `${s.id}-${currentWeek}-${currentTimeStr}`;
+                    const notiId = `${activeProfileId}-${s.id}-${currentWeek}-${currentTimeStr}`;
                     if (!sentNotifications.has(notiId)) {
                         sendPushNotification("Sắp đến giờ học!", `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút.`);
                         sentNotifications.add(notiId);
@@ -286,7 +402,6 @@
 
         setInterval(checkAndSendNotifications, 30000);
 
-        // GIAO DIỆN
         function setupOutsideClick() {
             const modalForm = document.getElementById('modal');
             const modalSettings = document.getElementById('settings-modal');
@@ -338,7 +453,7 @@
 
         function setNotiTime(t) { notiSettings.timeBefore = t; saveNotiSettings(); updateSettingsUI(); }
         function setNotiMode(m) { notiSettings.mode = m; saveNotiSettings(); updateSettingsUI(); }
-        function saveNotiSettings() { localStorage.setItem('noti_settings', JSON.stringify(notiSettings)); }
+        function saveNotiSettings() { saveProfileData(); }
 
         function syncCurrentWeek() {
             const val = parseInt(document.getElementById('current-week-input').value);
@@ -356,7 +471,11 @@
             }
         }
 
-        function updateStartDate(val) { startDate = val; localStorage.setItem('app_start_date', val); updateHeader(); renderDaySelector(); renderSchedules(); }
+        function updateStartDate(val) { 
+            startDate = val; 
+            saveProfileData(); 
+            updateHeader(); renderDaySelector(); renderSchedules(); 
+        }
 
         function renderDaySelector() {
             const container = document.getElementById('day-selector');
@@ -378,7 +497,7 @@
             const container = document.getElementById('schedule-container');
             const empty = document.getElementById('empty-state');
             const filtered = schedules.filter(s => s.day == selectedDay && s.parsedWeeks.includes(viewWeek))
-                             .sort((a, b) => a.startTime.localeCompare(b.startTime));
+                                     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
             if (filtered.length === 0) { container.innerHTML = ''; empty.classList.remove('hidden'); } 
             else {
@@ -424,7 +543,7 @@
         
         function deleteSchedule(id) { 
             schedules = schedules.filter(s => s.id !== id); 
-            localStorage.setItem('schedules', JSON.stringify(schedules)); 
+            saveProfileData();
             renderSchedules(); 
             renderModalList(); 
             showMessage("Đã xóa lịch học"); 
@@ -451,12 +570,11 @@
                 rawWeek: weekStr,
                 parsedWeeks: parsed
             });
-            localStorage.setItem('schedules', JSON.stringify(schedules));
+            saveProfileData();
             e.target.reset(); renderSchedules(); renderModalList(); showMessage("Đã lưu!");
         };
 
         function updateHeader() {
-            // Cập nhật định dạng ngày: Thêm năm vào tiêu đề
             const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
             document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', options);
             
@@ -478,9 +596,8 @@
         }
 
         function init() {
-            const real = calculateRealWeek();
-            viewWeek = real > 0 ? real : 1;
-            updateHeader(); renderDaySelector(); renderSchedules(); setupOutsideClick();
+            loadProfileData(activeProfileId);
+            setupOutsideClick();
         }
 
         window.onload = init;
