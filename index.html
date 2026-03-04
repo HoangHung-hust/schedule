@@ -6,8 +6,6 @@
     <title>S-Schedule | Quản lý Thời khóa biểu</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
@@ -231,9 +229,7 @@
         
         let notiSettings = JSON.parse(localStorage.getItem('noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
         let startDate = localStorage.getItem('app_start_date') || getMonday(new Date()).toISOString();
-        let sentNotifications = new Set(
-            JSON.parse(localStorage.getItem("sent_noti")) || []
-        );
+        let sentNotifications = new Set();
 
         // THÔNG BÁO
         async function handleNotificationToggle() {
@@ -256,71 +252,39 @@
         }
 
         function checkAndSendNotifications() {
-            resetDailyNotifications();
             if (!notiSettings.enabled || schedules.length === 0) return;
-
             const now = new Date();
             const currentWeek = calculateRealWeek();
             const currentDay = now.getDay();
-            const nowMs = now.getTime();
-
-            const todaysSchedules = schedules.filter(s =>
-                s.day == currentDay && s.parsedWeeks.includes(currentWeek)
-            );
+            const currentTimeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            const todaysSchedules = schedules.filter(s => s.day == currentDay && s.parsedWeeks.includes(currentWeek));
 
             todaysSchedules.forEach(s => {
                 const [h, m] = s.startTime.split(':').map(Number);
-
                 const scheduleTime = new Date();
                 scheduleTime.setHours(h, m, 0, 0);
+                const diffMs = scheduleTime - now;
+                const diffMin = Math.floor(diffMs / 60000);
 
-                const targetTime = new Date(scheduleTime.getTime() - notiSettings.timeBefore * 60000);
-                const targetMs = targetTime.getTime();
-
-                const diff = nowMs - targetMs;
-
-                // Cho phép sai số 60s để tránh miss
-                if (diff >= 0 && diff <= 60000) {
-
-                    const notiId = `${s.id}-${currentWeek}`;
-
+                if (diffMin === notiSettings.timeBefore) {
+                    const notiId = `${s.id}-${currentWeek}-${currentTimeStr}`;
                     if (!sentNotifications.has(notiId)) {
-                        sendPushNotification(
-                            "📚 Sắp đến giờ học!",
-                            `${s.subject} (${s.startTime}) tại ${s.room || 'N/A'}`
-                        );
-
+                        sendPushNotification("Sắp đến giờ học!", `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút.`);
                         sentNotifications.add(notiId);
-                        localStorage.setItem("sent_noti", JSON.stringify([...sentNotifications]));
                     }
                 }
             });
-        }
-
-        function resetDailyNotifications() {
-            const today = new Date().toDateString();
-            const lastReset = localStorage.getItem("last_reset");
-
-            if (lastReset !== today) {
-                sentNotifications.clear();
-                localStorage.removeItem("sent_noti");
-                localStorage.setItem("last_reset", today);
-            }
+            if (now.getMinutes() === 0) sentNotifications.clear();
         }
 
         function sendPushNotification(title, body) {
             if (Notification.permission === 'granted') {
-                new Notification(title, {
-                    body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-                    badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-                    vibrate: [200, 100, 200],
-                    requireInteraction: true
-                });
+                new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' });
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             }
         }
 
-        setInterval(checkAndSendNotifications, 15000);
+        setInterval(checkAndSendNotifications, 30000);
 
         // GIAO DIỆN
         function setupOutsideClick() {
@@ -520,41 +484,6 @@
         }
 
         window.onload = init;
-        checkAndSendNotifications();
-
-        // Firebase init
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCvpTkTSi51M8gKynQnC5v-6jCi5dSQLCg",
-            authDomain: "fir-schedule-d5b3d.firebaseapp.com",
-            projectId: "fir-schedule-d5b3d",
-            storageBucket: "fir-schedule-d5b3d.firebasestorage.app",
-            messagingSenderId: "1024089636097",
-            appId: "1:1024089636097:web:0c6ff1a814b9ab66c3ef00",
-            measurementId: "G-T1FBKRLEY4"
-        };
-
-
-        const app = initializeApp(firebaseConfig);
-        const messaging = getMessaging(app);
-
-        async function requestFirebasePermission() {
-            const permission = await Notification.requestPermission();
-            if (permission === "granted") {
-                const token = await getToken(messaging, {
-                    vapidKey: "YOUR_VAPID_KEY"
-                });
-
-                console.log("FCM Token:", token);
-                localStorage.setItem("fcm_token", token);
-            }
-        }
-
-        onMessage(messaging, (payload) => {
-            console.log("Message received:", payload);
-        });
     </script>
 </body>
 </html>
