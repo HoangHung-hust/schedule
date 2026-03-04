@@ -120,7 +120,7 @@
         <!-- Chọn thứ -->
         <div class="flex overflow-x-auto py-2 space-x-3 no-scrollbar" id="day-selector"></div>
 
-        <!-- Danh sách môn học (MÀN HÌNH CHÍNH) -->
+        <!-- Danh sách môn học -->
         <div id="schedule-container" class="space-y-4"></div>
 
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-400">
@@ -130,6 +130,21 @@
             <p class="font-medium">Hôm nay bạn không có lịch học</p>
         </div>
     </main>
+
+    <!-- MODAL CHỈNH SỬA TÊN NGƯỜI HỌC (NEW) -->
+    <div id="profile-edit-modal" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center p-6 animate-fade-in">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl modal-transition overflow-hidden">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Đổi tên hồ sơ</h3>
+            <p class="text-xs text-gray-400 mb-4 font-medium uppercase">Nhập tên mới cho lịch học này</p>
+            
+            <input type="text" id="profile-name-input" class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none focus:border-indigo-500 bg-gray-50 font-semibold text-gray-700 transition-all mb-4" placeholder="Ví dụ: Người học 1">
+            
+            <div class="flex space-x-3">
+                <button onclick="closeProfileEditModal()" class="flex-1 py-3 rounded-xl font-bold text-gray-400 hover:bg-gray-50 transition-colors">Hủy</button>
+                <button id="confirm-profile-btn" class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-all">Lưu lại</button>
+            </div>
+        </div>
+    </div>
 
     <!-- BẢNG CÀI ĐẶT THÔNG BÁO -->
     <div id="settings-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
@@ -202,7 +217,7 @@
         </div>
     </div>
 
-    <!-- FORM THÊM & XÓA LỊCH (TRÌNH QUẢN LÝ) -->
+    <!-- FORM THÊM & XÓA LỊCH -->
     <div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
         <div class="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl modal-transition transform translate-y-full max-h-[90vh] overflow-y-auto cursor-default no-scrollbar" id="modal-content">
             <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
@@ -264,22 +279,24 @@
         ];
         let activeProfileId = localStorage.getItem('s_active_profile') || 'me';
 
-        // ORIGINAL DATA LOADING WRAPPED BY PROFILE
+        // DATA LOADING
         let schedules = [];
         let notiSettings = {};
         let startDate = "";
+        let viewWeek = 1;
+        let selectedDay = new Date().getDay();
+        const days = [{ id: 1, name: 'T2' }, { id: 2, name: 'T3' }, { id: 3, name: 'T4' }, { id: 4, name: 'T5' }, { id: 5, name: 'T6' }, { id: 6, name: 'T7' }, { id: 0, name: 'CN' }];
+        const dayMap = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
+        let sentNotifications = new Set();
 
         function loadProfileData(pid) {
             activeProfileId = pid;
             localStorage.setItem('s_active_profile', pid);
-            
-            // Cấu trúc key mới: prefix_profileID_key
             const prefix = `s_v2_${pid}_`;
             schedules = JSON.parse(localStorage.getItem(prefix + 'schedules')) || [];
             notiSettings = JSON.parse(localStorage.getItem(prefix + 'noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
             startDate = localStorage.getItem(prefix + 'app_start_date') || getMonday(new Date()).toISOString();
             
-            // Sync with UI
             const real = calculateRealWeek();
             viewWeek = real > 0 ? real : 1;
             
@@ -287,6 +304,7 @@
             renderDaySelector();
             renderSchedules();
             renderProfileList();
+            if(document.getElementById('settings-modal').classList.contains('hidden') === false) updateSettingsUI();
         }
 
         function saveProfileData() {
@@ -310,15 +328,34 @@
             }
         }
 
-        function editProfileName(id) {
-            if (id === 'me') return;
+        // --- HỆ THỐNG MODAL CHỈNH SỬA TÊN NGƯỜI HỌC (NEW) ---
+        const profileModal = document.getElementById('profile-edit-modal');
+        const profileInput = document.getElementById('profile-name-input');
+        const profileConfirmBtn = document.getElementById('confirm-profile-btn');
+        let profileIdToEdit = null;
+
+        function openProfileEditModal(id) {
+            profileIdToEdit = id;
             const profile = profiles.find(p => p.id === id);
-            const newName = prompt("Nhập tên mới cho lịch này:", profile.name);
-            if (newName && newName.trim()) {
-                profile.name = newName.trim();
-                localStorage.setItem('s_profiles', JSON.stringify(profiles));
-                renderProfileList();
-            }
+            profileInput.value = profile.name;
+            profileModal.classList.remove('hidden');
+            setTimeout(() => profileInput.focus(), 100);
+
+            profileConfirmBtn.onclick = () => {
+                const newName = profileInput.value.trim();
+                if (newName) {
+                    profile.name = newName;
+                    localStorage.setItem('s_profiles', JSON.stringify(profiles));
+                    renderProfileList();
+                    closeProfileEditModal();
+                    showMessage("Đã đổi tên hồ sơ");
+                }
+            };
+        }
+
+        function closeProfileEditModal() {
+            profileModal.classList.add('hidden');
+            profileIdToEdit = null;
         }
 
         function renderProfileList() {
@@ -333,7 +370,7 @@
                         <span class="font-semibold text-gray-700">${p.name}</span>
                     </div>
                     ${p.id !== 'me' ? `
-                        <button onclick="event.stopPropagation(); editProfileName('${p.id}')" class="text-gray-300 hover:text-indigo-500 p-2">
+                        <button onclick="event.stopPropagation(); openProfileEditModal('${p.id}')" class="text-gray-300 hover:text-indigo-500 p-2">
                             <i class="fas fa-edit text-sm"></i>
                         </button>
                     ` : ''}
@@ -341,12 +378,24 @@
             `).join('');
         }
 
-        // ORIGINAL LOGIC (MODIFIED TO USE SAVE_PROFILE_DATA)
-        let viewWeek = 1;
-        let selectedDay = new Date().getDay();
-        const days = [{ id: 1, name: 'T2' }, { id: 2, name: 'T3' }, { id: 3, name: 'T4' }, { id: 4, name: 'T5' }, { id: 5, name: 'T6' }, { id: 6, name: 'T7' }, { id: 0, name: 'CN' }];
-        const dayMap = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
-        let sentNotifications = new Set();
+        // --- ORIGINAL LOGIC ---
+        function updateHeader() {
+            const headerDate = document.getElementById('current-date-header');
+            const now = new Date();
+            // Chỉnh sửa dòng dưới đây để thêm năm
+            headerDate.innerText = now.toLocaleDateString('vi-VN', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long',
+                year: 'numeric' // Thêm thuộc tính này
+            });
+            
+            const badge = document.getElementById('real-week-badge').firstElementChild;
+            const real = calculateRealWeek();
+            badge.innerText = `Tuần học thứ ${real > 0 ? real : 1}`;
+            
+            document.getElementById('week-display').innerText = `Tuần ${viewWeek}`;
+        }
 
         async function handleNotificationToggle() {
             const checkbox = document.getElementById('noti-toggle');
@@ -367,12 +416,32 @@
             saveNotiSettings();
         }
 
+        function updateSettingsUI() {
+            document.getElementById('noti-toggle').checked = notiSettings.enabled;
+            [15, 30, 45, 60].forEach(t => {
+                const btn = document.getElementById(`time-${t}`);
+                if (notiSettings.timeBefore === t) {
+                    btn.classList.replace('text-gray-400', 'text-indigo-600');
+                    btn.classList.add('bg-indigo-50', 'border-indigo-200');
+                } else {
+                    btn.classList.replace('text-indigo-600', 'text-gray-400');
+                    btn.classList.remove('bg-indigo-50', 'border-indigo-200');
+                }
+            });
+            ['each', 'day'].forEach(m => {
+                const card = document.getElementById(`mode-${m}`);
+                if (notiSettings.mode === m) card.classList.add('active');
+                else card.classList.remove('active');
+            });
+            document.getElementById('current-week-input').value = calculateRealWeek();
+            document.getElementById('start-date-input').value = new Date(startDate).toISOString().split('T')[0];
+        }
+
         function checkAndSendNotifications() {
             if (!notiSettings.enabled || schedules.length === 0) return;
             const now = new Date();
             const currentWeek = calculateRealWeek();
             const currentDay = now.getDay();
-            const currentTimeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
             const todaysSchedules = schedules.filter(s => s.day == currentDay && s.parsedWeeks.includes(currentWeek));
 
             todaysSchedules.forEach(s => {
@@ -383,30 +452,19 @@
                 const diffMin = Math.floor(diffMs / 60000);
 
                 if (diffMin === notiSettings.timeBefore) {
-                    const notiId = `${activeProfileId}-${s.id}-${currentWeek}-${currentTimeStr}`;
+                    const notiId = `${activeProfileId}-${s.id}-${currentWeek}`;
                     if (!sentNotifications.has(notiId)) {
                         sendPushNotification("Sắp đến giờ học!", `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút.`);
                         sentNotifications.add(notiId);
                     }
                 }
             });
-            if (now.getMinutes() === 0) sentNotifications.clear();
         }
 
         function sendPushNotification(title, body) {
             if (Notification.permission === 'granted') {
                 new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' });
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             }
-        }
-
-        setInterval(checkAndSendNotifications, 30000);
-
-        function setupOutsideClick() {
-            const modalForm = document.getElementById('modal');
-            const modalSettings = document.getElementById('settings-modal');
-            modalForm.addEventListener('click', (e) => { if (e.target === modalForm) toggleModal(false); });
-            modalSettings.addEventListener('click', (e) => { if (e.target === modalSettings) toggleSettings(false); });
         }
 
         function showMessage(msg, type = 'success') {
@@ -451,10 +509,9 @@
             else { c.classList.add('translate-y-full'); setTimeout(() => m.classList.add('hidden'), 300); }
         }
 
-        function setNotiTime(t) { notiSettings.timeBefore = t; saveNotiSettings(); updateSettingsUI(); }
-        function setNotiMode(m) { notiSettings.mode = m; saveNotiSettings(); updateSettingsUI(); }
-        function saveNotiSettings() { saveProfileData(); }
-
+        function setNotiTime(t) { notiSettings.timeBefore = t; saveProfileData(); updateSettingsUI(); }
+        function setNotiMode(m) { notiSettings.mode = m; saveProfileData(); updateSettingsUI(); }
+        
         function syncCurrentWeek() {
             const val = parseInt(document.getElementById('current-week-input').value);
             if (val > 0) {
@@ -466,7 +523,6 @@
                 const newStart = new Date(thisMonday.getTime() - (val - 1) * 7 * 24 * 60 * 60 * 1000);
                 updateStartDate(newStart.toISOString());
                 viewWeek = val;
-                updateHeader(); renderDaySelector(); renderSchedules();
                 showMessage("Đồng bộ thành công");
             }
         }
@@ -525,7 +581,7 @@
             const container = document.getElementById('modal-list');
             if (schedules.length === 0) { container.innerHTML = '<p class="text-[10px] text-gray-300 italic text-center py-2">Chưa có môn học nào</p>'; return; }
             container.innerHTML = [...schedules].reverse().map(s => `
-                <div class="flex items-center justify-between bg-gray-50 p-3 rounded-2xl animate-fade-in">
+                <div class="flex items-center justify-between bg-gray-50 p-3 rounded-2xl animate-fade-in mb-2">
                     <div class="flex flex-col space-y-0.5 max-w-[80%]">
                         <div class="flex items-center space-x-2">
                             <span class="font-bold text-gray-800 text-xs truncate">${s.subject}</span>
@@ -571,36 +627,24 @@
                 parsedWeeks: parsed
             });
             saveProfileData();
-            e.target.reset(); renderSchedules(); renderModalList(); showMessage("Đã lưu!");
+            e.target.reset();
+            renderSchedules();
+            renderModalList();
+            showMessage("Thêm lịch học thành công");
         };
 
-        function updateHeader() {
-            const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-            document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', options);
-            
-            document.getElementById('week-display').innerText = `Tuần ${viewWeek}`;
-            const real = calculateRealWeek();
-            document.getElementById('real-week-badge').innerHTML = `<span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-widest">${real > 0 ? 'Hôm nay: Tuần ' + real : 'Sắp bắt đầu học kỳ'}</span>`;
-        }
-
-        function updateSettingsUI() {
-            document.getElementById('noti-toggle').checked = notiSettings.enabled;
-            document.querySelectorAll('.grid button').forEach(btn => {
-                const val = parseInt(btn.innerText);
-                if (val === notiSettings.timeBefore) btn.className = "py-4 rounded-2xl font-bold transition-all bg-indigo-600 text-white shadow-md border border-indigo-600";
-                else btn.className = "py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white";
-            });
-            document.getElementById('mode-each').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'each' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
-            document.getElementById('mode-day').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'day' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
-            document.getElementById('start-date-input').value = new Date(startDate).toISOString().split('T')[0];
-        }
-
-        function init() {
+        // Initialize
+        window.onload = () => {
             loadProfileData(activeProfileId);
-            setupOutsideClick();
-        }
-
-        window.onload = init;
+            setInterval(checkAndSendNotifications, 30000);
+            
+            // Đóng modal khi click ra ngoài
+            const modalForm = document.getElementById('modal');
+            const modalSettings = document.getElementById('settings-modal');
+            modalForm.addEventListener('click', (e) => { if (e.target === modalForm) toggleModal(false); });
+            modalSettings.addEventListener('click', (e) => { if (e.target === modalSettings) toggleSettings(false); });
+            profileModal.addEventListener('click', (e) => { if (e.target === profileModal) closeProfileEditModal(); });
+        };
     </script>
 </body>
 </html>
