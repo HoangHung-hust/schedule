@@ -579,17 +579,27 @@
 
         function renderModalList() {
             const container = document.getElementById('modal-list');
-            if (schedules.length === 0) { container.innerHTML = '<p class="text-[10px] text-gray-300 italic text-center py-2">Chưa có môn học nào</p>'; return; }
+            if (schedules.length === 0) { 
+                container.innerHTML = '<p class="text-[10px] text-gray-300 italic text-center py-2">Chưa có môn học nào</p>'; 
+                return; 
+            }
             container.innerHTML = [...schedules].reverse().map(s => `
                 <div class="flex items-center justify-between bg-gray-50 p-3 rounded-2xl animate-fade-in mb-2">
-                    <div class="flex flex-col space-y-0.5 max-w-[80%]">
+                    <div class="flex flex-col space-y-0.5 max-w-[65%]">
                         <div class="flex items-center space-x-2">
                             <span class="font-bold text-gray-800 text-xs truncate">${s.subject}</span>
                             <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-md text-[8px] font-bold">${dayMap[s.day]}</span>
                         </div>
                         <p class="text-[9px] text-gray-500 font-medium">${s.startTime}-${s.endTime} | ${s.room || 'N/A'}</p>
                     </div>
-                    <button onclick="deleteSchedule(${s.id})" class="w-8 h-8 flex items-center justify-center bg-white text-red-500 rounded-full shadow-sm hover:bg-red-50"><i class="fas fa-times text-sm"></i></button>
+                    <div class="flex space-x-2">
+                        <button onclick="editSchedule(${s.id})" class="w-8 h-8 flex items-center justify-center bg-white text-indigo-500 rounded-full shadow-sm hover:bg-indigo-50 transition-colors">
+                            <i class="fas fa-pen text-[10px]"></i>
+                        </button>
+                        <button onclick="deleteSchedule(${s.id})" class="w-8 h-8 flex items-center justify-center bg-white text-red-500 rounded-full shadow-sm hover:bg-red-50">
+                            <i class="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -607,6 +617,9 @@
 
         document.getElementById('schedule-form').onsubmit = (e) => {
             e.preventDefault();
+            const form = e.target;
+            const editId = form.dataset.editId; // Kiểm tra xem có đang sửa không
+            
             const weekStr = document.getElementById('week-config').value;
             const parsed = weekStr.split(',').flatMap(s => {
                 if (s.includes('-')) {
@@ -616,8 +629,7 @@
                 return [Number(s.trim())];
             }).filter(n => !isNaN(n));
 
-            schedules.push({
-                id: Date.now(),
+            const scheduleData = {
                 subject: document.getElementById('subject').value,
                 startTime: document.getElementById('start-time').value,
                 endTime: document.getElementById('end-time').value,
@@ -625,12 +637,24 @@
                 room: document.getElementById('room').value,
                 rawWeek: weekStr,
                 parsedWeeks: parsed
-            });
+            };
+
+            if (editId) {
+                // Chế độ CẬP NHẬT
+                const index = schedules.findIndex(s => s.id == editId);
+                schedules[index] = { ...schedules[index], ...scheduleData };
+                delete form.dataset.editId; // Xóa trạng thái sửa
+                showMessage("Đã cập nhật thay đổi");
+            } else {
+                // Chế độ THÊM MỚI
+                schedules.push({ id: Date.now(), ...scheduleData });
+                showMessage("Thêm lịch học thành công");
+            }
+
             saveProfileData();
-            e.target.reset();
+            form.reset();
             renderSchedules();
             renderModalList();
-            showMessage("Thêm lịch học thành công");
         };
 
         // Initialize
@@ -645,6 +669,25 @@
             modalSettings.addEventListener('click', (e) => { if (e.target === modalSettings) toggleSettings(false); });
             profileModal.addEventListener('click', (e) => { if (e.target === profileModal) closeProfileEditModal(); });
         };
+
+        function editSchedule(id) {
+            const item = schedules.find(s => s.id === id);
+            if (!item) return;
+
+            // Đổ dữ liệu vào các ô input trong form
+            document.getElementById('subject').value = item.subject;
+            document.getElementById('start-time').value = item.startTime;
+            document.getElementById('end-time').value = item.endTime;
+            document.getElementById('day-of-week').value = item.day;
+            document.getElementById('room').value = item.room;
+            document.getElementById('week-config').value = item.rawWeek;
+
+            // Lưu lại ID đang sửa vào thuộc tính data của form
+            document.getElementById('schedule-form').dataset.editId = id;
+            
+            // Cuộn xuống phần nhập liệu để người dùng thấy
+            document.getElementById('schedule-form').scrollIntoView({ behavior: 'smooth' });
+        }
     </script>
 </body>
 </html>
