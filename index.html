@@ -75,6 +75,7 @@
             <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-widest italic">Đang đồng bộ...</span>
         </div>
 
+        <!-- Chuyển tuần -->
         <div class="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between border border-gray-100">
             <button onclick="changeWeek(-1)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><i class="fas fa-chevron-left"></i></button>
             <div class="text-center">
@@ -83,8 +84,10 @@
             <button onclick="changeWeek(1)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><i class="fas fa-chevron-right"></i></button>
         </div>
 
+        <!-- Chọn thứ -->
         <div class="flex overflow-x-auto py-2 space-x-3 no-scrollbar" id="day-selector"></div>
 
+        <!-- Danh sách môn học (MÀN HÌNH CHÍNH) -->
         <div id="schedule-container" class="space-y-4"></div>
 
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-400">
@@ -166,18 +169,20 @@
         </div>
     </div>
 
-    <!-- FORM THÊM LỊCH -->
+    <!-- FORM THÊM & XÓA LỊCH (TRÌNH QUẢN LÝ) -->
     <div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
         <div class="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl modal-transition transform translate-y-full max-h-[90vh] overflow-y-auto cursor-default no-scrollbar" id="modal-content">
             <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
             <div class="flex justify-between items-center mb-4 text-gray-800">
-                <h2 class="text-xl font-bold">Thêm lịch mới</h2>
+                <h2 class="text-xl font-bold">Quản lý lịch học</h2>
                 <button onclick="toggleModal(false)" class="text-gray-400"><i class="fas fa-times"></i></button>
             </div>
             
-            <div id="modal-list" class="max-h-48 overflow-y-auto mb-4 space-y-2 border-b border-gray-100 pb-4 no-scrollbar"></div>
+            <p class="text-[10px] font-bold text-gray-400 uppercase mb-2 ml-1">Danh sách đã thêm (Bấm X để xóa)</p>
+            <div id="modal-list" class="max-h-60 overflow-y-auto mb-6 space-y-2 border-b border-gray-100 pb-6 no-scrollbar"></div>
             
             <form id="schedule-form" class="space-y-4">
+                <p class="text-sm font-bold text-gray-800 border-l-4 border-indigo-600 pl-2">Thêm môn mới</p>
                 <div class="space-y-1">
                     <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Thông tin môn</p>
                     <input type="text" id="subject" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none focus:border-indigo-500 transition-all" placeholder="Tên môn học">
@@ -224,20 +229,20 @@
         
         let notiSettings = JSON.parse(localStorage.getItem('noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
         let startDate = localStorage.getItem('app_start_date') || getMonday(new Date()).toISOString();
-        let sentNotifications = new Set(); // Chặn gửi lặp trong cùng 1 phút
+        let sentNotifications = new Set();
 
-        // 1. HỆ THỐNG THÔNG BÁO THỰC
+        // THÔNG BÁO
         async function handleNotificationToggle() {
             const checkbox = document.getElementById('noti-toggle');
             if (checkbox.checked) {
                 const permission = await Notification.requestPermission();
                 if (permission !== 'granted') {
                     checkbox.checked = false;
-                    showMessage("Bạn cần cấp quyền thông báo trên trình duyệt!", "error");
+                    showMessage("Bạn cần cấp quyền thông báo!", "error");
                     notiSettings.enabled = false;
                 } else {
                     notiSettings.enabled = true;
-                    showMessage("Đã bật thông báo thành công!");
+                    showMessage("Đã bật thông báo!");
                 }
             } else {
                 notiSettings.enabled = false;
@@ -248,57 +253,40 @@
 
         function checkAndSendNotifications() {
             if (!notiSettings.enabled || schedules.length === 0) return;
-
             const now = new Date();
             const currentWeek = calculateRealWeek();
             const currentDay = now.getDay();
             const currentTimeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
-
-            // Chỉ lấy môn học của tuần và ngày hiện tại
             const todaysSchedules = schedules.filter(s => s.day == currentDay && s.parsedWeeks.includes(currentWeek));
 
             todaysSchedules.forEach(s => {
-                // Tính thời điểm cần gửi thông báo
                 const [h, m] = s.startTime.split(':').map(Number);
                 const scheduleTime = new Date();
                 scheduleTime.setHours(h, m, 0, 0);
-                
                 const diffMs = scheduleTime - now;
                 const diffMin = Math.floor(diffMs / 60000);
 
-                // Gửi nếu còn đúng số phút cài đặt (ví dụ 15 phút nữa vào học)
                 if (diffMin === notiSettings.timeBefore) {
                     const notiId = `${s.id}-${currentWeek}-${currentTimeStr}`;
                     if (!sentNotifications.has(notiId)) {
-                        sendPushNotification(
-                            "Sắp đến giờ học!", 
-                            `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút tại phòng ${s.room || 'N/A'}.`
-                        );
+                        sendPushNotification("Sắp đến giờ học!", `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút.`);
                         sentNotifications.add(notiId);
                     }
                 }
             });
-
-            // Tự động dọn dẹp Set sau mỗi tiếng để tránh tốn ram
             if (now.getMinutes() === 0) sentNotifications.clear();
         }
 
         function sendPushNotification(title, body) {
             if (Notification.permission === 'granted') {
-                const n = new Notification(title, {
-                    body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-                    vibrate: [200, 100, 200]
-                });
-                // Rung điện thoại nếu trình duyệt hỗ trợ
+                new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' });
                 if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
             }
         }
 
-        // Chạy vòng lặp kiểm tra mỗi 30 giây
         setInterval(checkAndSendNotifications, 30000);
 
-        // 2. CÁC HÀM GIAO DIỆN CŨ (GIỮ NGUYÊN)
+        // GIAO DIỆN
         function setupOutsideClick() {
             const modalForm = document.getElementById('modal');
             const modalSettings = document.getElementById('settings-modal');
@@ -364,7 +352,7 @@
                 updateStartDate(newStart.toISOString());
                 viewWeek = val;
                 updateHeader(); renderDaySelector(); renderSchedules();
-                showMessage("Đồng bộ tuần học thành công");
+                showMessage("Đồng bộ thành công");
             }
         }
 
@@ -408,7 +396,7 @@
                                 <p class="text-xs text-gray-400"><i class="fas fa-location-dot mr-1"></i>${s.room || 'N/A'}</p>
                             </div>
                         </div>
-                        <button onclick="deleteSchedule(${s.id})" class="text-gray-200 hover:text-red-400 p-2"><i class="fas fa-trash-alt"></i></button>
+                        <div class="text-indigo-100"><i class="fas fa-calendar-check"></i></div>
                     </div>
                 `).join('');
             }
@@ -426,14 +414,21 @@
                         </div>
                         <p class="text-[9px] text-gray-500 font-medium">${s.startTime}-${s.endTime} | ${s.room || 'N/A'}</p>
                     </div>
-                    <button onclick="deleteSchedule(${s.id})" class="w-7 h-7 flex items-center justify-center bg-white text-red-400 rounded-full shadow-sm"><i class="fas fa-times text-xs"></i></button>
+                    <button onclick="deleteSchedule(${s.id})" class="w-8 h-8 flex items-center justify-center bg-white text-red-500 rounded-full shadow-sm hover:bg-red-50"><i class="fas fa-times text-sm"></i></button>
                 </div>
             `).join('');
         }
 
         function selectDay(id) { selectedDay = id; renderDaySelector(); renderSchedules(); }
         function changeWeek(delta) { viewWeek = Math.max(1, viewWeek + delta); updateHeader(); renderDaySelector(); renderSchedules(); }
-        function deleteSchedule(id) { schedules = schedules.filter(s => s.id !== id); localStorage.setItem('schedules', JSON.stringify(schedules)); renderSchedules(); renderModalList(); showMessage("Đã xóa môn học"); }
+        
+        function deleteSchedule(id) { 
+            schedules = schedules.filter(s => s.id !== id); 
+            localStorage.setItem('schedules', JSON.stringify(schedules)); 
+            renderSchedules(); 
+            renderModalList(); 
+            showMessage("Đã xóa lịch học"); 
+        }
 
         document.getElementById('schedule-form').onsubmit = (e) => {
             e.preventDefault();
@@ -461,7 +456,10 @@
         };
 
         function updateHeader() {
-            document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' });
+            // Cập nhật định dạng ngày: Thêm năm vào tiêu đề
+            const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+            document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', options);
+            
             document.getElementById('week-display').innerText = `Tuần ${viewWeek}`;
             const real = calculateRealWeek();
             document.getElementById('real-week-badge').innerHTML = `<span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-widest">${real > 0 ? 'Hôm nay: Tuần ' + real : 'Sắp bắt đầu học kỳ'}</span>`;
