@@ -87,7 +87,7 @@
         <!-- Chọn thứ -->
         <div class="flex overflow-x-auto py-2 space-x-3 no-scrollbar" id="day-selector"></div>
 
-        <!-- Danh sách môn học (MÀN HÌNH CHÍNH) -->
+        <!-- Danh sách môn học -->
         <div id="schedule-container" class="space-y-4"></div>
 
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-400">
@@ -141,18 +141,18 @@
                             <i class="fas fa-check"></i>
                         </div>
                     </div>
-                    <div onclick="setNotiMode('day')" id="mode-day" class="option-card p-5 rounded-[1.5rem] border border-gray-100 bg-white cursor-pointer relative">
-                        <h4 class="font-bold text-gray-800">Tất cả môn trong ngày</h4>
-                        <p class="text-sm text-gray-400">Tóm tắt lịch học vào đầu ngày</p>
-                        <div class="check-icon absolute right-5 top-1/2 -translate-y-1/2 hidden w-6 h-6 bg-indigo-600 rounded-full items-center justify-center text-white text-xs">
-                            <i class="fas fa-check"></i>
-                        </div>
-                    </div>
                 </div>
             </div>
 
+            <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-8">
+                <p class="text-[11px] text-amber-700 font-medium">
+                    <i class="fas fa-info-circle mr-1"></i> 
+                    Nếu không nhận được thông báo, hãy kiểm tra quyền trong cài đặt trình duyệt và đảm bảo tab này đang được mở.
+                </p>
+            </div>
+
             <div class="mb-8">
-                <p class="text-lg font-bold text-gray-700 mb-4">Đồng bộ tuần học hiện tại</p>
+                <p class="text-lg font-bold text-gray-700 mb-4">Đồng bộ tuần hiện tại</p>
                 <div class="flex space-x-3">
                     <input type="number" id="current-week-input" class="w-20 bg-[#f8faff] px-4 py-4 rounded-2xl border border-gray-100 text-center font-bold text-indigo-600 outline-none" value="1">
                     <button onclick="syncCurrentWeek()" class="flex-1 bg-white text-indigo-600 py-4 rounded-2xl font-bold border border-gray-100 shadow-sm active:bg-gray-50">Cập nhật ngay</button>
@@ -160,16 +160,15 @@
             </div>
 
             <div class="mb-10">
-                <p class="text-lg font-bold text-gray-700 mb-4">Ngày bắt đầu Tuần 1 (Học kỳ)</p>
+                <p class="text-lg font-bold text-gray-700 mb-4">Ngày bắt đầu Tuần 1</p>
                 <div class="bg-[#f8faff] p-4 rounded-2xl border border-gray-100 mb-2">
                     <input type="date" id="start-date-input" onchange="updateStartDate(this.value)" class="bg-transparent font-bold text-indigo-600 outline-none w-full">
                 </div>
-                <p class="text-[11px] text-gray-400 italic font-medium px-2">* Nếu bạn tạo lịch từ hè, hãy chọn ngày thứ Hai của tuần đầu tiên đi học.</p>
             </div>
         </div>
     </div>
 
-    <!-- FORM THÊM & XÓA LỊCH (TRÌNH QUẢN LÝ) -->
+    <!-- FORM THÊM & XÓA LỊCH -->
     <div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
         <div class="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl modal-transition transform translate-y-full max-h-[90vh] overflow-y-auto cursor-default no-scrollbar" id="modal-content">
             <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
@@ -178,7 +177,7 @@
                 <button onclick="toggleModal(false)" class="text-gray-400"><i class="fas fa-times"></i></button>
             </div>
             
-            <p class="text-[10px] font-bold text-gray-400 uppercase mb-2 ml-1">Danh sách đã thêm (Bấm X để xóa)</p>
+            <p class="text-[10px] font-bold text-gray-400 uppercase mb-2 ml-1">Danh sách đã thêm</p>
             <div id="modal-list" class="max-h-60 overflow-y-auto mb-6 space-y-2 border-b border-gray-100 pb-6 no-scrollbar"></div>
             
             <form id="schedule-form" class="space-y-4">
@@ -212,8 +211,8 @@
                     </div>
                 </div>
                 <div class="space-y-1">
-                    <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Cấu hình tuần</p>
-                    <input type="text" id="week-config" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none font-bold text-indigo-600" placeholder="Tuần (VD: 1-15, 17, 19-22)">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Cấu hình tuần (VD: 1-15, 17)</p>
+                    <input type="text" id="week-config" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none font-bold text-indigo-600" placeholder="Tuần">
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-transform">Lưu lịch học</button>
             </form>
@@ -231,18 +230,26 @@
         let startDate = localStorage.getItem('app_start_date') || getMonday(new Date()).toISOString();
         let sentNotifications = new Set();
 
-        // THÔNG BÁO
+        // LOGIC THÔNG BÁO
         async function handleNotificationToggle() {
             const checkbox = document.getElementById('noti-toggle');
             if (checkbox.checked) {
+                if (!("Notification" in window)) {
+                    checkbox.checked = false;
+                    showMessage("Trình duyệt này không hỗ trợ thông báo", "error");
+                    return;
+                }
+                
                 const permission = await Notification.requestPermission();
                 if (permission !== 'granted') {
                     checkbox.checked = false;
-                    showMessage("Bạn cần cấp quyền thông báo!", "error");
+                    showMessage("Bạn chưa cấp quyền thông báo!", "error");
                     notiSettings.enabled = false;
                 } else {
                     notiSettings.enabled = true;
-                    showMessage("Đã bật thông báo!");
+                    // Test notification
+                    sendPushNotification("Đã bật nhắc nhở", "Bạn sẽ nhận được thông báo trước giờ học.");
+                    showMessage("Đã kích hoạt thông báo!");
                 }
             } else {
                 notiSettings.enabled = false;
@@ -253,40 +260,65 @@
 
         function checkAndSendNotifications() {
             if (!notiSettings.enabled || schedules.length === 0) return;
+            
             const now = new Date();
             const currentWeek = calculateRealWeek();
             const currentDay = now.getDay();
-            const currentTimeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            
+            // Lọc lịch học của ngày hôm nay và tuần này
             const todaysSchedules = schedules.filter(s => s.day == currentDay && s.parsedWeeks.includes(currentWeek));
 
             todaysSchedules.forEach(s => {
                 const [h, m] = s.startTime.split(':').map(Number);
                 const scheduleTime = new Date();
                 scheduleTime.setHours(h, m, 0, 0);
+                
                 const diffMs = scheduleTime - now;
                 const diffMin = Math.floor(diffMs / 60000);
 
+                // Kiểm tra nếu đến thời điểm cần thông báo (ví dụ 15 phút trước)
                 if (diffMin === notiSettings.timeBefore) {
-                    const notiId = `${s.id}-${currentWeek}-${currentTimeStr}`;
+                    const notiId = `${s.id}-${currentWeek}-${h}:${m}`;
                     if (!sentNotifications.has(notiId)) {
-                        sendPushNotification("Sắp đến giờ học!", `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút.`);
+                        sendPushNotification(
+                            `Sắp đến giờ học: ${s.subject}`, 
+                            `Môn học bắt đầu lúc ${s.startTime} tại phòng ${s.room || 'N/A'}.`
+                        );
                         sentNotifications.add(notiId);
                     }
                 }
             });
-            if (now.getMinutes() === 0) sentNotifications.clear();
+            
+            // Xóa bộ nhớ thông báo đã gửi vào mỗi giờ để tránh tốn tài nguyên
+            if (now.getMinutes() === 0 && now.getSeconds() < 30) {
+                sentNotifications.clear();
+            }
         }
 
         function sendPushNotification(title, body) {
             if (Notification.permission === 'granted') {
-                new Notification(title, { body: body, icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' });
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                try {
+                    const n = new Notification(title, { 
+                        body: body, 
+                        icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+                        requireInteraction: true // Giữ thông báo trên màn hình lâu hơn
+                    });
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    
+                    n.onclick = function() {
+                        window.focus();
+                        this.close();
+                    };
+                } catch (e) {
+                    console.error("Lỗi gửi thông báo:", e);
+                }
             }
         }
 
+        // Chạy kiểm tra mỗi 30 giây
         setInterval(checkAndSendNotifications, 30000);
 
-        // GIAO DIỆN
+        // GIAO DIỆN & CƠ SỞ DỮ LIỆU
         function setupOutsideClick() {
             const modalForm = document.getElementById('modal');
             const modalSettings = document.getElementById('settings-modal');
@@ -336,8 +368,7 @@
             else { c.classList.add('translate-y-full'); setTimeout(() => m.classList.add('hidden'), 300); }
         }
 
-        function setNotiTime(t) { notiSettings.timeBefore = t; saveNotiSettings(); updateSettingsUI(); }
-        function setNotiMode(m) { notiSettings.mode = m; saveNotiSettings(); updateSettingsUI(); }
+        function setNotiTime(t) { notiSettings.timeBefore = t; saveNotiSettings(); updateSettingsUI(); showMessage(`Sẽ thông báo trước ${t} phút`); }
         function saveNotiSettings() { localStorage.setItem('noti_settings', JSON.stringify(notiSettings)); }
 
         function syncCurrentWeek() {
@@ -452,11 +483,10 @@
                 parsedWeeks: parsed
             });
             localStorage.setItem('schedules', JSON.stringify(schedules));
-            e.target.reset(); renderSchedules(); renderModalList(); showMessage("Đã lưu!");
+            e.target.reset(); renderSchedules(); renderModalList(); showMessage("Đã lưu thành công!");
         };
 
         function updateHeader() {
-            // Cập nhật định dạng ngày: Thêm năm vào tiêu đề
             const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
             document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', options);
             
@@ -472,8 +502,6 @@
                 if (val === notiSettings.timeBefore) btn.className = "py-4 rounded-2xl font-bold transition-all bg-indigo-600 text-white shadow-md border border-indigo-600";
                 else btn.className = "py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white";
             });
-            document.getElementById('mode-each').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'each' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
-            document.getElementById('mode-day').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'day' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
             document.getElementById('start-date-input').value = new Date(startDate).toISOString().split('T')[0];
         }
 
