@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-Schedule | Quản lý Thời khóa biểu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .time-pill { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .modal-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .option-card { border: 2px solid transparent; transition: all 0.2s ease; }
+        .option-card.active { border-color: #4f46e5; background-color: #f5f3ff; }
+        .option-card.active .check-icon { display: flex; }
+
+        #toast-container {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .toast-item {
+            background: #1f2937;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            pointer-events: auto;
+            animation: slideUp 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <div id="toast-container"></div>
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex justify-between items-center">
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">S-Schedule</h1>
+            <p id="current-date-header" class="text-[10px] text-gray-400 font-bold uppercase tracking-wider"></p>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button onclick="toggleModal(true)" class="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
+                <i class="fas fa-pen"></i>
+            </button>
+            <button onclick="toggleSettings(true)" class="p-2.5 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-100 transition-colors">
+                <i class="fas fa-bell"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="p-4 space-y-4">
+        <div id="real-week-badge" class="text-center">
+            <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-widest italic">Đang đồng bộ...</span>
+        </div>
+
+        <div class="bg-white rounded-2xl p-3 shadow-sm flex items-center justify-between border border-gray-100">
+            <button onclick="changeWeek(-1)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><i class="fas fa-chevron-left"></i></button>
+            <div class="text-center">
+                <span id="week-display" class="font-bold text-gray-800 text-lg">Tuần 1</span>
+            </div>
+            <button onclick="changeWeek(1)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><i class="fas fa-chevron-right"></i></button>
+        </div>
+
+        <div class="flex overflow-x-auto py-2 space-x-3 no-scrollbar" id="day-selector"></div>
+
+        <div id="schedule-container" class="space-y-4"></div>
+
+        <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-400">
+            <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <i class="fas fa-calendar-day text-3xl"></i>
+            </div>
+            <p class="font-medium">Hôm nay bạn không có lịch học</p>
+        </div>
+    </main>
+
+    <!-- BẢNG CÀI ĐẶT THÔNG BÁO -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
+        <div class="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl modal-transition transform translate-y-full max-h-[90vh] overflow-y-auto cursor-default no-scrollbar" id="settings-content">
+            <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+            
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">Cài đặt Thông báo</h2>
+                <button onclick="toggleSettings(false)" class="text-gray-400 text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="bg-[#f8faff] p-5 rounded-[2rem] flex items-center justify-between mb-8">
+                <div class="flex items-center space-x-4">
+                    <div class="w-11 h-11 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center">
+                        <i class="fas fa-power-off text-lg"></i>
+                    </div>
+                    <span class="font-bold text-gray-800 text-lg">Bật thông báo</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="noti-toggle" class="sr-only peer" onchange="handleNotificationToggle()">
+                    <div class="w-14 h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+            </div>
+
+            <div class="mb-8">
+                <p class="text-lg font-bold text-gray-700 mb-4">Thông báo trước (phút)</p>
+                <div class="grid grid-cols-4 gap-3">
+                    <button onclick="setNotiTime(15)" id="time-15" class="py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white">15</button>
+                    <button onclick="setNotiTime(30)" id="time-30" class="py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white">30</button>
+                    <button onclick="setNotiTime(45)" id="time-45" class="py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white">45</button>
+                    <button onclick="setNotiTime(60)" id="time-60" class="py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white">60</button>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <p class="text-lg font-bold text-gray-700 mb-4">Chế độ nhắc nhở</p>
+                <div class="space-y-3">
+                    <div onclick="setNotiMode('each')" id="mode-each" class="option-card p-5 rounded-[1.5rem] border border-gray-100 bg-white cursor-pointer relative">
+                        <h4 class="font-bold text-gray-800">Từng môn học</h4>
+                        <p class="text-sm text-gray-400">Thông báo riêng cho mỗi tiết học</p>
+                        <div class="check-icon absolute right-5 top-1/2 -translate-y-1/2 hidden w-6 h-6 bg-indigo-600 rounded-full items-center justify-center text-white text-xs">
+                            <i class="fas fa-check"></i>
+                        </div>
+                    </div>
+                    <div onclick="setNotiMode('day')" id="mode-day" class="option-card p-5 rounded-[1.5rem] border border-gray-100 bg-white cursor-pointer relative">
+                        <h4 class="font-bold text-gray-800">Tất cả môn trong ngày</h4>
+                        <p class="text-sm text-gray-400">Tóm tắt lịch học vào đầu ngày</p>
+                        <div class="check-icon absolute right-5 top-1/2 -translate-y-1/2 hidden w-6 h-6 bg-indigo-600 rounded-full items-center justify-center text-white text-xs">
+                            <i class="fas fa-check"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <p class="text-lg font-bold text-gray-700 mb-4">Đồng bộ tuần học hiện tại</p>
+                <div class="flex space-x-3">
+                    <input type="number" id="current-week-input" class="w-20 bg-[#f8faff] px-4 py-4 rounded-2xl border border-gray-100 text-center font-bold text-indigo-600 outline-none" value="1">
+                    <button onclick="syncCurrentWeek()" class="flex-1 bg-white text-indigo-600 py-4 rounded-2xl font-bold border border-gray-100 shadow-sm active:bg-gray-50">Cập nhật ngay</button>
+                </div>
+            </div>
+
+            <div class="mb-10">
+                <p class="text-lg font-bold text-gray-700 mb-4">Ngày bắt đầu Tuần 1 (Học kỳ)</p>
+                <div class="bg-[#f8faff] p-4 rounded-2xl border border-gray-100 mb-2">
+                    <input type="date" id="start-date-input" onchange="updateStartDate(this.value)" class="bg-transparent font-bold text-indigo-600 outline-none w-full">
+                </div>
+                <p class="text-[11px] text-gray-400 italic font-medium px-2">* Nếu bạn tạo lịch từ hè, hãy chọn ngày thứ Hai của tuần đầu tiên đi học.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- FORM THÊM LỊCH -->
+    <div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center p-0 cursor-pointer">
+        <div class="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl modal-transition transform translate-y-full max-h-[90vh] overflow-y-auto cursor-default no-scrollbar" id="modal-content">
+            <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+            <div class="flex justify-between items-center mb-4 text-gray-800">
+                <h2 class="text-xl font-bold">Thêm lịch mới</h2>
+                <button onclick="toggleModal(false)" class="text-gray-400"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div id="modal-list" class="max-h-48 overflow-y-auto mb-4 space-y-2 border-b border-gray-100 pb-4 no-scrollbar"></div>
+            
+            <form id="schedule-form" class="space-y-4">
+                <div class="space-y-1">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Thông tin môn</p>
+                    <input type="text" id="subject" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none focus:border-indigo-500 transition-all" placeholder="Tên môn học">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Bắt đầu</p>
+                        <input type="time" id="start-time" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Kết thúc</p>
+                        <input type="time" id="end-time" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Thứ</p>
+                        <select id="day-of-week" class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none bg-white">
+                            <option value="1">Thứ Hai</option><option value="2">Thứ Ba</option><option value="3">Thứ Tư</option>
+                            <option value="4">Thứ Năm</option><option value="5">Thứ Sáu</option><option value="6">Thứ Bảy</option>
+                            <option value="0">Chủ Nhật</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Phòng học</p>
+                        <input type="text" id="room" class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none" placeholder="Phòng">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase ml-1">Cấu hình tuần</p>
+                    <input type="text" id="week-config" required class="w-full px-4 py-3 rounded-xl border border-gray-100 outline-none font-bold text-indigo-600" placeholder="Tuần (VD: 1-15, 17, 19-22)">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-transform">Lưu lịch học</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let schedules = JSON.parse(localStorage.getItem('schedules')) || [];
+        let viewWeek = 1;
+        let selectedDay = new Date().getDay();
+        const days = [{ id: 1, name: 'T2' }, { id: 2, name: 'T3' }, { id: 3, name: 'T4' }, { id: 4, name: 'T5' }, { id: 5, name: 'T6' }, { id: 6, name: 'T7' }, { id: 0, name: 'CN' }];
+        const dayMap = { 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN" };
+        
+        let notiSettings = JSON.parse(localStorage.getItem('noti_settings')) || { enabled: false, timeBefore: 15, mode: 'each' };
+        let startDate = localStorage.getItem('app_start_date') || getMonday(new Date()).toISOString();
+        let sentNotifications = new Set(); // Chặn gửi lặp trong cùng 1 phút
+
+        // 1. HỆ THỐNG THÔNG BÁO THỰC
+        async function handleNotificationToggle() {
+            const checkbox = document.getElementById('noti-toggle');
+            if (checkbox.checked) {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    checkbox.checked = false;
+                    showMessage("Bạn cần cấp quyền thông báo trên trình duyệt!", "error");
+                    notiSettings.enabled = false;
+                } else {
+                    notiSettings.enabled = true;
+                    showMessage("Đã bật thông báo thành công!");
+                }
+            } else {
+                notiSettings.enabled = false;
+                showMessage("Đã tắt thông báo");
+            }
+            saveNotiSettings();
+        }
+
+        function checkAndSendNotifications() {
+            if (!notiSettings.enabled || schedules.length === 0) return;
+
+            const now = new Date();
+            const currentWeek = calculateRealWeek();
+            const currentDay = now.getDay();
+            const currentTimeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+
+            // Chỉ lấy môn học của tuần và ngày hiện tại
+            const todaysSchedules = schedules.filter(s => s.day == currentDay && s.parsedWeeks.includes(currentWeek));
+
+            todaysSchedules.forEach(s => {
+                // Tính thời điểm cần gửi thông báo
+                const [h, m] = s.startTime.split(':').map(Number);
+                const scheduleTime = new Date();
+                scheduleTime.setHours(h, m, 0, 0);
+                
+                const diffMs = scheduleTime - now;
+                const diffMin = Math.floor(diffMs / 60000);
+
+                // Gửi nếu còn đúng số phút cài đặt (ví dụ 15 phút nữa vào học)
+                if (diffMin === notiSettings.timeBefore) {
+                    const notiId = `${s.id}-${currentWeek}-${currentTimeStr}`;
+                    if (!sentNotifications.has(notiId)) {
+                        sendPushNotification(
+                            "Sắp đến giờ học!", 
+                            `Môn ${s.subject} sẽ bắt đầu sau ${notiSettings.timeBefore} phút tại phòng ${s.room || 'N/A'}.`
+                        );
+                        sentNotifications.add(notiId);
+                    }
+                }
+            });
+
+            // Tự động dọn dẹp Set sau mỗi tiếng để tránh tốn ram
+            if (now.getMinutes() === 0) sentNotifications.clear();
+        }
+
+        function sendPushNotification(title, body) {
+            if (Notification.permission === 'granted') {
+                const n = new Notification(title, {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+                    vibrate: [200, 100, 200]
+                });
+                // Rung điện thoại nếu trình duyệt hỗ trợ
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            }
+        }
+
+        // Chạy vòng lặp kiểm tra mỗi 30 giây
+        setInterval(checkAndSendNotifications, 30000);
+
+        // 2. CÁC HÀM GIAO DIỆN CŨ (GIỮ NGUYÊN)
+        function setupOutsideClick() {
+            const modalForm = document.getElementById('modal');
+            const modalSettings = document.getElementById('settings-modal');
+            modalForm.addEventListener('click', (e) => { if (e.target === modalForm) toggleModal(false); });
+            modalSettings.addEventListener('click', (e) => { if (e.target === modalSettings) toggleSettings(false); });
+        }
+
+        function showMessage(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast-item animate-slide-up`;
+            let icon = type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle';
+            toast.innerHTML = `<i class="fas ${icon}"></i> <span>${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function getMonday(d) {
+            d = new Date(d);
+            let day = d.getDay();
+            let diff = d.getDate() - day + (day == 0 ? -6 : 1);
+            let mon = new Date(d.setDate(diff));
+            mon.setHours(0,0,0,0);
+            return mon;
+        }
+
+        function calculateRealWeek() {
+            const now = new Date();
+            now.setHours(0,0,0,0);
+            const start = new Date(startDate);
+            start.setHours(0,0,0,0);
+            if (now < start) return 0; 
+            return Math.floor((now - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        }
+
+        function toggleModal(show) {
+            const m = document.getElementById('modal');
+            const c = document.getElementById('modal-content');
+            if(show) { m.classList.remove('hidden'); setTimeout(() => c.classList.remove('translate-y-full'), 10); renderModalList(); }
+            else { c.classList.add('translate-y-full'); setTimeout(() => m.classList.add('hidden'), 300); }
+        }
+
+        function toggleSettings(show) {
+            const m = document.getElementById('settings-modal');
+            const c = document.getElementById('settings-content');
+            if(show) { m.classList.remove('hidden'); setTimeout(() => c.classList.remove('translate-y-full'), 10); updateSettingsUI(); }
+            else { c.classList.add('translate-y-full'); setTimeout(() => m.classList.add('hidden'), 300); }
+        }
+
+        function setNotiTime(t) { notiSettings.timeBefore = t; saveNotiSettings(); updateSettingsUI(); }
+        function setNotiMode(m) { notiSettings.mode = m; saveNotiSettings(); updateSettingsUI(); }
+        function saveNotiSettings() { localStorage.setItem('noti_settings', JSON.stringify(notiSettings)); }
+
+        function syncCurrentWeek() {
+            const val = parseInt(document.getElementById('current-week-input').value);
+            if (val > 0) {
+                const now = new Date();
+                const currentDay = now.getDay();
+                const daysToMonday = currentDay === 0 ? 6 : currentDay - 1;
+                const thisMonday = new Date(now.getTime() - daysToMonday * 24 * 60 * 60 * 1000);
+                thisMonday.setHours(0,0,0,0);
+                const newStart = new Date(thisMonday.getTime() - (val - 1) * 7 * 24 * 60 * 60 * 1000);
+                updateStartDate(newStart.toISOString());
+                viewWeek = val;
+                updateHeader(); renderDaySelector(); renderSchedules();
+                showMessage("Đồng bộ tuần học thành công");
+            }
+        }
+
+        function updateStartDate(val) { startDate = val; localStorage.setItem('app_start_date', val); updateHeader(); renderDaySelector(); renderSchedules(); }
+
+        function renderDaySelector() {
+            const container = document.getElementById('day-selector');
+            container.innerHTML = days.map(day => {
+                const isSelected = selectedDay == day.id;
+                const start = new Date(startDate);
+                let offsetDays = (viewWeek - 1) * 7 + (day.id === 0 ? 6 : day.id - 1);
+                const dateNum = new Date(start.getTime() + offsetDays * 24 * 60 * 60 * 1000).getDate();
+                return `
+                    <button onclick="selectDay(${day.id})" class="flex-shrink-0 w-12 h-16 rounded-2xl flex flex-col items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-white text-gray-500 border border-gray-100'}">
+                        <span class="text-[10px] font-bold uppercase mb-1">${day.name}</span>
+                        <span class="text-lg font-bold">${dateNum}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function renderSchedules() {
+            const container = document.getElementById('schedule-container');
+            const empty = document.getElementById('empty-state');
+            const filtered = schedules.filter(s => s.day == selectedDay && s.parsedWeeks.includes(viewWeek))
+                             .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            if (filtered.length === 0) { container.innerHTML = ''; empty.classList.remove('hidden'); } 
+            else {
+                empty.classList.add('hidden');
+                container.innerHTML = filtered.map(s => `
+                    <div class="glass-card rounded-3xl p-5 flex items-center justify-between animate-fade-in border-l-4 border-l-indigo-500 shadow-sm">
+                        <div class="flex items-center space-x-4">
+                            <div class="time-pill w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shrink-0">
+                                <span class="text-[9px] font-bold">${s.startTime}</span>
+                                <div class="w-2 h-[1px] bg-white/30 my-1"></div>
+                                <span class="text-[9px] font-bold opacity-80">${s.endTime}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-800">${s.subject}</h3>
+                                <p class="text-xs text-gray-400"><i class="fas fa-location-dot mr-1"></i>${s.room || 'N/A'}</p>
+                            </div>
+                        </div>
+                        <button onclick="deleteSchedule(${s.id})" class="text-gray-200 hover:text-red-400 p-2"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function renderModalList() {
+            const container = document.getElementById('modal-list');
+            if (schedules.length === 0) { container.innerHTML = '<p class="text-[10px] text-gray-300 italic text-center py-2">Chưa có môn học nào</p>'; return; }
+            container.innerHTML = [...schedules].reverse().map(s => `
+                <div class="flex items-center justify-between bg-gray-50 p-3 rounded-2xl animate-fade-in">
+                    <div class="flex flex-col space-y-0.5 max-w-[80%]">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-gray-800 text-xs truncate">${s.subject}</span>
+                            <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-md text-[8px] font-bold">${dayMap[s.day]}</span>
+                        </div>
+                        <p class="text-[9px] text-gray-500 font-medium">${s.startTime}-${s.endTime} | ${s.room || 'N/A'}</p>
+                    </div>
+                    <button onclick="deleteSchedule(${s.id})" class="w-7 h-7 flex items-center justify-center bg-white text-red-400 rounded-full shadow-sm"><i class="fas fa-times text-xs"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function selectDay(id) { selectedDay = id; renderDaySelector(); renderSchedules(); }
+        function changeWeek(delta) { viewWeek = Math.max(1, viewWeek + delta); updateHeader(); renderDaySelector(); renderSchedules(); }
+        function deleteSchedule(id) { schedules = schedules.filter(s => s.id !== id); localStorage.setItem('schedules', JSON.stringify(schedules)); renderSchedules(); renderModalList(); showMessage("Đã xóa môn học"); }
+
+        document.getElementById('schedule-form').onsubmit = (e) => {
+            e.preventDefault();
+            const weekStr = document.getElementById('week-config').value;
+            const parsed = weekStr.split(',').flatMap(s => {
+                if (s.includes('-')) {
+                    const [st, en] = s.split('-').map(Number);
+                    return Array.from({length: en - st + 1}, (_, i) => st + i);
+                }
+                return [Number(s.trim())];
+            }).filter(n => !isNaN(n));
+
+            schedules.push({
+                id: Date.now(),
+                subject: document.getElementById('subject').value,
+                startTime: document.getElementById('start-time').value,
+                endTime: document.getElementById('end-time').value,
+                day: parseInt(document.getElementById('day-of-week').value),
+                room: document.getElementById('room').value,
+                rawWeek: weekStr,
+                parsedWeeks: parsed
+            });
+            localStorage.setItem('schedules', JSON.stringify(schedules));
+            e.target.reset(); renderSchedules(); renderModalList(); showMessage("Đã lưu!");
+        };
+
+        function updateHeader() {
+            document.getElementById('current-date-header').innerText = new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' });
+            document.getElementById('week-display').innerText = `Tuần ${viewWeek}`;
+            const real = calculateRealWeek();
+            document.getElementById('real-week-badge').innerHTML = `<span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-widest">${real > 0 ? 'Hôm nay: Tuần ' + real : 'Sắp bắt đầu học kỳ'}</span>`;
+        }
+
+        function updateSettingsUI() {
+            document.getElementById('noti-toggle').checked = notiSettings.enabled;
+            document.querySelectorAll('.grid button').forEach(btn => {
+                const val = parseInt(btn.innerText);
+                if (val === notiSettings.timeBefore) btn.className = "py-4 rounded-2xl font-bold transition-all bg-indigo-600 text-white shadow-md border border-indigo-600";
+                else btn.className = "py-4 rounded-2xl font-bold transition-all border border-gray-100 text-gray-400 bg-white";
+            });
+            document.getElementById('mode-each').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'each' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
+            document.getElementById('mode-day').className = `option-card p-5 rounded-[1.5rem] border relative cursor-pointer ${notiSettings.mode === 'day' ? 'active shadow-sm' : 'border-gray-100 bg-white'}`;
+            document.getElementById('start-date-input').value = new Date(startDate).toISOString().split('T')[0];
+        }
+
+        function init() {
+            const real = calculateRealWeek();
+            viewWeek = real > 0 ? real : 1;
+            updateHeader(); renderDaySelector(); renderSchedules(); setupOutsideClick();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
